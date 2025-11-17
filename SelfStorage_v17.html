@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Storage Unit Highlight + Entrada + Smooth Camera Intro</title>
+  <style>
+    body { margin: 0; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/FontLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/geometries/TextGeometry.js"></script>
+<script>
+  // URL parameters
+  const params = new URLSearchParams(window.location.search);
+  const highlightX = parseInt(params.get('coluna'));
+  const highlightY = parseInt(params.get('andar'));
+  const highlightZ = parseInt(params.get('linha'));
+
+  // Scene setup
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Lighting
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(10, 20, 10);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x404040));
+
+  // Floor and walls
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(20, 0.5, 20), new THREE.MeshStandardMaterial({color: 0x999999}));
+  floor.position.y = -0.25;
+  scene.add(floor);
+
+  const wallMaterial = new THREE.MeshStandardMaterial({color: 0xffffff});
+  const wallBack = new THREE.Mesh(new THREE.BoxGeometry(20, 10, 0.5), wallMaterial);
+  wallBack.position.set(0, 5, -10);
+  scene.add(wallBack);
+  const wallLeft = new THREE.Mesh(new THREE.BoxGeometry(0.5, 10, 20), wallMaterial);
+  wallLeft.position.set(-10, 5, 0);
+  scene.add(wallLeft);
+  const wallRight = new THREE.Mesh(new THREE.BoxGeometry(0.5, 10, 20), wallMaterial);
+  wallRight.position.set(10, 5, 0);
+  scene.add(wallRight);
+
+  // ENTRADA text
+  const loader = new THREE.FontLoader();
+  loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', function(font) {
+    const textGeometry = new THREE.TextGeometry('ENTRADA', {
+      font: font,
+      size: 2,
+      height: 0.2
+    });
+    const textMaterial = new THREE.MeshStandardMaterial({color: 0x333333});
+    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+    textMesh.position.set(-6, 0.3, 9); // Entrance edge
+    textMesh.rotation.x = -Math.PI / 2;
+    scene.add(textMesh);
+  });
+
+  // Boxes
+  const rows = 4, cols = 3, height = 3;
+  const boxSize = 2, spacing = 3;
+  const normalMaterial = new THREE.MeshStandardMaterial({color: 0xcc9966, transparent: true, opacity: 0.3});
+  const highlightMaterial = new THREE.MeshStandardMaterial({color: 0xff0000});
+
+  for (let x = 0; x < rows; x++) {
+    for (let y = 0; y < height; y++) {
+      for (let z = 0; z < cols; z++) {
+        const isHighlight = (x === highlightX && y === highlightY && z === highlightZ);
+        const material = isHighlight ? highlightMaterial : normalMaterial;
+        const box = new THREE.Mesh(new THREE.BoxGeometry(boxSize, boxSize, boxSize), material);
+        box.position.set(x * spacing - (rows * spacing)/2, y * spacing, z * spacing - (cols * spacing)/2);
+        scene.add(box);
+      }
+    }
+  }
+
+  // Camera & Controls
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.enableZoom = true;
+  controls.target.set(0, 5, 0);
+
+  // Smooth intro animation
+  let startPos = {x: 40, y: 40, z: 60}; // Start far away
+  let endPos = {x: 15, y: 15, z: 25};   // Final immersive position
+  let progress = 0;
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    if (progress < 1) {
+      progress += 0.01; // Speed of animation
+      camera.position.x = startPos.x + (endPos.x - startPos.x) * progress;
+      camera.position.y = startPos.y + (endPos.y - startPos.y) * progress;
+      camera.position.z = startPos.z + (endPos.z - startPos.z) * progress;
+      camera.lookAt(0, 5, 0);
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+</script>
+</body>
+</html>
