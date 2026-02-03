@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>L‑Shaped Storage – 3D Schematic</title>
+  <style>
+    :root {
+      --tile: 34;
+      --height: 16;
+      --top-fill: #b8cce0;
+      --left-fill: #a0bbd4;
+      --right-fill: #8fa9c3;
+      --stroke: #466c8a;
+      --stroke-hi: #8a4a00;
+
+      --top-fill-hi: #ffb77a;
+      --left-fill-hi: #ff9d4d;
+      --right-fill-hi: #f27e1e;
+      --label-color: #123247;
+      --label-color-hi: #4a2200;
+      --bg: #f6f9fc;
+    }
+
+    html, body { height: 100%; }
+    body {
+      margin: 0; padding: 0;
+      background: var(--bg);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      color: #0f2a3a;
+    }
+
+    .wrap { max-width: 980px; margin: 18px auto 28px; padding: 0 12px; }
+
+    svg { width: 100%; height: auto; display: block; }
+
+    .face { stroke: var(--stroke); stroke-width: .9; }
+    .face.top  { fill: var(--top-fill); }
+    .face.left { fill: var(--left-fill); }
+    .face.right{ fill: var(--right-fill); }
+
+    .hi .face { stroke: var(--stroke-hi); }
+    .hi .top  { fill: var(--top-fill-hi); }
+    .hi .left { fill: var(--left-fill-hi); }
+    .hi .right{ fill: var(--right-fill-hi); }
+
+    .label { font-size: 14px; fill: var(--label-color); font-weight: 700; text-anchor: middle; }
+    .hi .label { fill: var(--label-color-hi); }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <svg id="scene" viewBox="0 0 740 460" role="img"></svg>
+  </div>
+
+  <script>
+    (function() {
+      const svgNS = 'http://www.w3.org/2000/svg';
+
+      function qp(name) { const u = new URL(window.location.href); return u.searchParams.get(name); }
+      function qpInt(name, def) { const v = parseInt(qp(name), 10); return Number.isFinite(v) ? v : def; }
+
+      const DEPTH = 6;
+      const WIDTH = Math.max(3, Math.min(4, qpInt('w', 3)));
+
+      const tile = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tile')) || 34;
+      const h = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--height')) || 16;
+      const ax = { x: tile,  y: -tile/2 };
+      const dz = { x: -tile, y: -tile/2 };
+
+      const backLeft = { x: 380, y: 130 };
+      const frontLeft = { x: backLeft.x - dz.x * (DEPTH - 1), y: backLeft.y - dz.y * (DEPTH - 1) };
+
+      const scene = document.getElementById('scene');
+      const boxMap = new Map();
+
+      function addPolygon(parent, points, className) {
+        const p = document.createElementNS(svgNS, 'polygon');
+        p.setAttribute('points', points.map(pt => `${pt.x},${pt.y}`).join(' '));
+        p.setAttribute('class', className);
+        parent.appendChild(p);
+        return p;
+      }
+
+      function addText(parent, x, y, txt, className) {
+        const t = document.createElementNS(svgNS, 'text');
+        t.setAttribute('x', x);
+        t.setAttribute('y', y);
+        t.setAttribute('class', className);
+        t.textContent = txt;
+        parent.appendChild(t);
+        return t;
+      }
+
+      function drawIsoBox(origin, keyNum) {
+        const p0 = { x: origin.x, y: origin.y };
+        const p1 = { x: origin.x + ax.x,        y: origin.y + ax.y };
+        const p2 = { x: origin.x + ax.x + dz.x, y: origin.y + ax.y + dz.y };
+        const p3 = { x: origin.x + dz.x,        y: origin.y + dz.y };
+
+        const g = document.createElementNS(svgNS, 'g');
+        g.setAttribute('data-n', keyNum);
+
+        addPolygon(g, [p3,p0,{x:p0.x,y:p0.y+h},{x:p3.x,y:p3.y+h}], 'face left');
+        addPolygon(g, [p0,p1,{x:p1.x,y:p1.y+h},{x:p0.x,y:p0.y+h}], 'face right');
+        addPolygon(g, [p0,p1,p2,p3], 'face top');
+
+        const cx = (p0.x + p1.x + p2.x + p3.x) / 4;
+        const cy = (p0.y + p1.y + p2.y + p3.y) / 4 - 3;
+
+        addText(g, cx, cy, keyNum, 'label');
+
+        const title = document.createElementNS(svgNS, 'title');
+        title.textContent = keyNum;
+        g.appendChild(title);
+
+        scene.appendChild(g);
+        return g;
+      }
+
+      // Draw back row (B2..B4 → 7..9)
+      for (let j = WIDTH; j >= 2; j--) {
+        const origin = { x: backLeft.x + ax.x * (j - 1), y: backLeft.y + ax.y * (j - 1) };
+        const num = 5 + j;
+        const g = drawIsoBox(origin, num);
+        boxMap.set(num, g);
+      }
+
+      // Corner B1 ≡ L6 → 6
+      {
+        const origin = { x: backLeft.x, y: backLeft.y };
+        const g = drawIsoBox(origin, 6);
+        boxMap.set(6, g);
+      }
+
+      // Left column L5..L1 → 5..1
+      for (let i = DEPTH - 1; i >= 1; i--) {
+        const origin = { x: frontLeft.x + dz.x * (i - 1), y: frontLeft.y + dz.y * (i - 1) };
+        const g = drawIsoBox(origin, i);
+        boxMap.set(i, g);
+      }
+
+      // highlight
+      const n = qpInt('n', NaN);
+      if (Number.isFinite(n) && boxMap.has(n)) {
+        boxMap.get(n).classList.add('hi');
+      }
+
+    })();
+  </script>
+</body>
+</html>
