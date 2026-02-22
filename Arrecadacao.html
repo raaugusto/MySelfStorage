@@ -61,10 +61,10 @@
 
       function qp(name) { const u = new URL(window.location.href); return u.searchParams.get(name); }
       function qpInt(name, def) { const v = parseInt(qp(name), 10); return Number.isFinite(v) ? v : def; }
+      function qpFloat(name, def) { const v = parseFloat(qp(name)); return Number.isFinite(v) ? v : def; }
 
       const DEPTH = 6;
-
-      // Allow up to two more boxes in the back row: width 5 or 6 via ?w=5 or ?w=6
+      // Back-row width: allow up to 6
       const WIDTH = Math.max(3, Math.min(6, qpInt('w', 3)));
 
       const tile = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tile')) || 34;
@@ -75,7 +75,7 @@
       const dz = { x: -tile, y: -tile/2 };
 
       // Anchor points
-      const backLeft  = { x: 380, y: 130 };
+      const backLeft  = { x: 380, y: 130 }; // Corner of the L (B1 ≡ L6)
       const frontLeft = { x: backLeft.x - dz.x * (DEPTH - 1), y: backLeft.y - dz.y * (DEPTH - 1) };
 
       const scene = document.getElementById('scene');
@@ -99,26 +99,27 @@
         return t;
       }
 
-      function drawIsoBox(origin, keyNum) {
+      // Accepts either numbers or letters as labels
+      function drawIsoBox(origin, key) {
         const p0 = { x: origin.x, y: origin.y };
-        const p1 = { x: origin.x + ax.x,        y: origin.y + ax.y };
+        the_p1 = { x: origin.x + ax.x,        y: origin.y + ax.y };
         const p2 = { x: origin.x + ax.x + dz.x, y: origin.y + ax.y + dz.y };
         const p3 = { x: origin.x + dz.x,        y: origin.y + dz.y };
 
         const g = document.createElementNS(svgNS, 'g');
-        g.setAttribute('data-n', keyNum);
+        g.setAttribute('data-n', key);
 
         addPolygon(g, [p3,p0,{x:p0.x,y:p0.y+h},{x:p3.x,y:p3.y+h}], 'face left');
-        addPolygon(g, [p0,p1,{x:p1.x,y:p1.y+h},{x:p0.x,y:p0.y+h}], 'face right');
-        addPolygon(g, [p0,p1,p2,p3], 'face top');
+        addPolygon(g, [p0, the_p1,{x:the_p1.x,y:the_p1.y+h},{x:p0.x,y:p0.y+h}], 'face right');
+        addPolygon(g, [p0,the_p1,p2,p3], 'face top');
 
-        const cx = (p0.x + p1.x + p2.x + p3.x) / 4;
-        const cy = (p0.y + p1.y + p2.y + p3.y) / 4 - 3;
+        const cx = (p0.x + the_p1.x + p2.x + p3.x) / 4;
+        const cy = (p0.y + the_p1.y + p2.y + p3.y) / 4 - 3;
 
-        addText(g, cx, cy, keyNum, 'label');
+        addText(g, cx, cy, key, 'label');
 
         const title = document.createElementNS(svgNS, 'title');
-        title.textContent = keyNum;
+        title.textContent = key;
         g.appendChild(title);
 
         scene.appendChild(g);
@@ -147,18 +148,74 @@
         boxMap.set(i, g);
       }
 
-      // highlight via ?n=
-      const n = qpInt('n', NaN);
-      if (Number.isFinite(n) && boxMap.has(n)) {
-        boxMap.get(n).classList.add('hi');
-      }
+      // ---- Lettered boxes (shifted): a,c at former b,d positions; b,d moved further right ----
+      (function drawLetterGridShifted() {
+        // Spacing config (in "tile" units)
+        const gapX = qpFloat('gapx', 0.6);   // horizontal gap between columns
+        const gapY = qpFloat('gapy', 0.6);   // vertical gap between rows
+        const clearUnits = qpFloat('clear', 1.6); // clearance from the L corner toward the elbow
 
-      // --- NEW: auto-fit the SVG viewBox so wider back rows remain visible ---
-      // Compute the bounding box of everything drawn and pad it.
-      // (Use try/catch to be resilient if SVG does not support getBBox in some contexts)
+        // Base: push inside the elbow, away from the L along -dz
+        const start = {
+          x: backLeft.x + (-dz.x * clearUnits),
+          y: backLeft.y + (-dz.y * clearUnits)
+        };
+
+        // Column step along +ax with horizontal gap
+        const colStep = {
+          x: ax.x * (1 + gapX),
+          y: ax.y * (1 + gapX)
+        };
+
+        // Row step toward elbow interior along -dz with vertical gap
+        const rowStep = {
+          x: -dz.x * (1 + gapY),
+          y: -dz.y * (1 + gapY)
+        };
+
+        // Explicit placement:
+        // a -> row 0, col 1
+        // b -> row 0, col 2
+        // c -> row 1, col 1
+        // d -> row 1, col 2
+        const placements = [
+          { key: 'a', r: 0, c: 1 },
+          { key: 'b', r: 0, c: 2 },
+          { key: 'c', r: 1, c: 1 },
+          { key: 'd', r: 1, c: 2 },
+        ];
+
+        for (const { key, r, c } of placements) {
+          const origin = {
+            x: start.x + colStep.x * c + rowStep.x * r,
+            y: start.y + colStep.y * c + rowStep.y * r
+          };
+          const g = drawIsoBox(origin, key);
+          boxMap.set(key, g); // allow highlighting via ?n=a|b|c|d
+        }
+      })();
+      // -----------------------------------------------------------------------------------
+
+      // Highlight via ?n= (supports numbers and letters)
+      (function applyHighlight() {
+        const nParam = qp('n');
+        if (nParam == null) return;
+
+        const nNum = parseInt(nParam, 10);
+        if (Number.isFinite(nNum) && boxMap.has(nNum)) {
+          boxMap.get(nNum).classList.add('hi');
+          return;
+        }
+
+        if (boxMap.has(nParam)) {
+          boxMap.get(nParam).classList.add('hi');
+        }
+      })();
+
+      // Auto-fit the SVG viewBox so everything remains visible
       try {
         const bb = scene.getBBox();
-        const pad = 24; // extra breathing room for stroke/labels
+        const pad = 24; // breathing room for strokes/labels
         const vb = [
           Math.floor(bb.x - pad),
           Math.floor(bb.y - pad),
@@ -167,12 +224,11 @@
         ].join(' ');
         scene.setAttribute('viewBox', vb);
       } catch (e) {
-        // Fallback: widen viewBox proportionally if width increased
+        // Fallback: widen viewBox proportionally if WIDTH increased
         const baseW = 740;
         const extra = Math.max(0, WIDTH - 4) * tile * 2; // heuristic extension
         scene.setAttribute('viewBox', `0 0 ${baseW + extra} 460`);
       }
-      // ----------------------------------------------------------------------
     })();
   </script>
 </body>
