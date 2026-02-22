@@ -51,6 +51,7 @@
 
 <body>
   <div class="wrap">
+    <!-- Initial viewBox is a safe default; it will be recalculated after drawing -->
     <svg id="scene" viewBox="0 0 740 460" role="img"></svg>
   </div>
 
@@ -62,14 +63,19 @@
       function qpInt(name, def) { const v = parseInt(qp(name), 10); return Number.isFinite(v) ? v : def; }
 
       const DEPTH = 6;
-      const WIDTH = Math.max(3, Math.min(4, qpInt('w', 3)));
+
+      // Allow up to two more boxes in the back row: width 5 or 6 via ?w=5 or ?w=6
+      const WIDTH = Math.max(3, Math.min(6, qpInt('w', 3)));
 
       const tile = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tile')) || 34;
       const h = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--height')) || 16;
+
+      // Isometric axes
       const ax = { x: tile,  y: -tile/2 };
       const dz = { x: -tile, y: -tile/2 };
 
-      const backLeft = { x: 380, y: 130 };
+      // Anchor points
+      const backLeft  = { x: 380, y: 130 };
       const frontLeft = { x: backLeft.x - dz.x * (DEPTH - 1), y: backLeft.y - dz.y * (DEPTH - 1) };
 
       const scene = document.getElementById('scene');
@@ -119,7 +125,7 @@
         return g;
       }
 
-      // Draw back row (B2..B4 → 7..9)
+      // Draw back row (B2..B[WIDTH] → numbered 5 + j)
       for (let j = WIDTH; j >= 2; j--) {
         const origin = { x: backLeft.x + ax.x * (j - 1), y: backLeft.y + ax.y * (j - 1) };
         const num = 5 + j;
@@ -141,12 +147,32 @@
         boxMap.set(i, g);
       }
 
-      // highlight
+      // highlight via ?n=
       const n = qpInt('n', NaN);
       if (Number.isFinite(n) && boxMap.has(n)) {
         boxMap.get(n).classList.add('hi');
       }
 
+      // --- NEW: auto-fit the SVG viewBox so wider back rows remain visible ---
+      // Compute the bounding box of everything drawn and pad it.
+      // (Use try/catch to be resilient if SVG does not support getBBox in some contexts)
+      try {
+        const bb = scene.getBBox();
+        const pad = 24; // extra breathing room for stroke/labels
+        const vb = [
+          Math.floor(bb.x - pad),
+          Math.floor(bb.y - pad),
+          Math.ceil(bb.width + pad * 2),
+          Math.ceil(bb.height + pad * 2),
+        ].join(' ');
+        scene.setAttribute('viewBox', vb);
+      } catch (e) {
+        // Fallback: widen viewBox proportionally if width increased
+        const baseW = 740;
+        const extra = Math.max(0, WIDTH - 4) * tile * 2; // heuristic extension
+        scene.setAttribute('viewBox', `0 0 ${baseW + extra} 460`);
+      }
+      // ----------------------------------------------------------------------
     })();
   </script>
 </body>
